@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>パオこ3Dラン</title>
+<script src="https://www.youtube.com/game_api/v1"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { width:100%; height:100%; overflow:hidden; background:#7ec8f7;
+    font-family:"Hiragino Maru Gothic ProN","Hiragino Sans","Noto Sans JP",sans-serif;
+    touch-action:none; user-select:none; -webkit-user-select:none; }
+  #wrap { position:relative; width:100%; height:100%; }
+  #gl { position:absolute; inset:0; }
+  #gl canvas { display:block; width:100%; height:100%; }
+  #hud { position:absolute; top:0; left:0; right:0; display:flex; justify-content:space-between;
+    align-items:flex-start; padding:10px 14px; pointer-events:none; z-index:5; }
+  #scoreBox { background:rgba(255,255,255,.85); border-radius:14px; padding:6px 16px;
+    color:#26355e; font-weight:bold; font-size:clamp(16px,4.5vw,22px); box-shadow:0 3px 10px rgba(0,0,0,.18); }
+  #heartBox { background:rgba(255,255,255,.85); border-radius:14px; padding:6px 14px;
+    font-size:clamp(16px,4.5vw,22px); box-shadow:0 3px 10px rgba(0,0,0,.18); letter-spacing:2px; }
+  #ui { position:absolute; inset:0; pointer-events:none; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; z-index:10; }
+  .panel { pointer-events:auto; background:rgba(255,255,255,.94); border-radius:20px;
+    padding:26px 34px; text-align:center; box-shadow:0 8px 30px rgba(0,0,0,.25); max-width:88vw; }
+  .panel h1 { font-size:clamp(26px,6.5vw,40px); color:#d92b3a; margin-bottom:10px; }
+  .panel p { font-size:clamp(14px,3.5vw,17px); color:#444; line-height:1.75; margin-bottom:16px; }
+  button { pointer-events:auto; font-family:inherit; font-size:clamp(17px,4.5vw,21px); font-weight:bold;
+    color:#fff; background:linear-gradient(180deg,#ff5f7a,#d92b3a); border:none; border-radius:999px;
+    padding:13px 38px; cursor:pointer; box-shadow:0 4px 0 #8f1220; }
+  button:active { transform:translateY(3px); box-shadow:0 1px 0 #8f1220; }
+  .hidden { display:none !important; }
+  #score-final { font-size:clamp(20px,5vw,28px); color:#d92b3a; font-weight:bold; margin-bottom:6px; }
+  .paokoCanvas { display:block; margin:0 auto 4px; }
+  .paoko-cap { font-size:12px; color:#999; margin-bottom:8px; }
+  #cheer { position:absolute; left:10px; bottom:10px; z-index:6; pointer-events:none;
+    display:flex; align-items:flex-end; gap:6px; }
+  #cheer .bubble { background:#fff; color:#d92b3a; font-weight:bold; border-radius:12px;
+    padding:5px 10px; font-size:14px; box-shadow:0 3px 8px rgba(0,0,0,.2); margin-bottom:26px;
+    position:relative; }
+  #cheer .bubble:after { content:""; position:absolute; left:-6px; bottom:8px;
+    border:6px solid transparent; border-right-color:#fff; border-left:0; }
+  @keyframes bob { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-6px); } }
+  #cheerSprite { animation:bob .5s ease-in-out infinite; }
+  #errBox { color:#b00; font-size:14px; max-width:90vw; text-align:center; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="gl"></div>
+  <div id="hud" class="hidden">
+    <div id="scoreBox">スコア 0</div>
+    <div id="heartBox">❤️❤️❤️</div>
+  </div>
+  <div id="cheer" class="hidden">
+    <canvas id="cheerSprite" width="48" height="56"></canvas>
+    <div class="bubble" id="cheerText">がんばれ！</div>
+  </div>
+  <div id="ui">
+    <div class="panel" id="startPanel">
+      <canvas class="paokoCanvas" width="96" height="112"></canvas>
+      <div class="paoko-cap">マスコット：パオこ</div>
+      <h1>🏃‍♀️ パオこ3Dラン</h1>
+      <p>パオこが3レーンのコースを走り続けるよ！<br>
+      ← →キー（またはスワイプ／画面タップ）でレーン移動。<br>
+      障害物をよけて、🪙コイン（+50点）を集めよう。<br>
+      ハートは3つ。ぶつかると1つ減るよ。だんだん速くなる！</p>
+      <button id="startBtn">スタート</button>
+    </div>
+    <div class="panel hidden" id="endPanel">
+      <canvas class="paokoCanvas" width="96" height="112"></canvas>
+      <div class="paoko-cap">マスコット：パオこ</div>
+      <h1>おつかれさま！</h1>
+      <div id="score-final">0点</div>
+      <p id="best-line">ベスト: 0点</p>
+      <button id="restartBtn">もう一度あそぶ</button>
+    </div>
+    <div id="errBox" class="hidden"></div>
+  </div>
+</div>
+<script src="three.min.js"></script>
+<script>
+(function(){
+"use strict";
+// --- YouTube Playables SDK (optional, fully guarded) ---
+var ytReady = false;
+function ytCall(fn){ try{ if (typeof ytgame !== "undefined" && ytgame && typeof ytgame[fn] === "function"){ ytgame[fn](); } }catch(e){} }
+function ytFirstFrame(){ if(!ytReady){ ytReady = true; ytCall("firstFrameReady"); ytCall("gameReady"); } }
+
+// --- Mascot パオこ (master: ~/workspace/playables/mascot_sprite.js) ---
+var PAOKO_W = 24, PAOKO_H = 28;
+var PAOKO_PALETTE = {
+  "H": "#eceaf4", "h": "#b9b7cc", "S": "#ffe2cf", "E": "#43307a",
+  "W": "#ffffff", "c": "#ffb3c8", "m": "#e2607a", "K": "#26232e",
+  "R": "#d92b3a", "A": "#f6f3ee", "D": "#3c3a48", "P": "#f8a9c9"
+};
+var PAOKO_MAP = [
+  ".......HHHHHHHHHH.......",
+  ".....HHHHHHHHHHHHHH.....",
+  "...HHHHHHHHHHHHHHHHHH...",
+  "..PPHHHHHHHHHHHHHHHHPP..",
+  "..HHHHHHHHHHHHHHHHHHHH..",
+  "..HHHHHSSSSSSSSSSHHHHH..",
+  "..HHHHHSEESSSSSESHHHHH..",
+  "..HHHHHSWESSSSEWSHHHHH..",
+  "..HHHHHcSSSSSSSScHHHHH..",
+  "..HHHHHSSSSmmSSSSHHHHH..",
+  "..HHHHHSSSSSSSSSSHHHHH..",
+  "..HHHKKRRKKSSKKRRKKHHH..",
+  "..HHHKRKKKKKKKKKKRKHHH..",
+  "..HHHRRRRRRRRRRRRRRHHH..",
+  "..HHHKKAAAAAAAAAAKKHHH..",
+  "..HHHKKAAAAAAAAAAKKHHH..",
+  "..HHHKKAAADDDDAAAKKHHH..",
+  "..HHHKKAAADDRDAAAKKHHH..",
+  "..HHHKKAAAAAAAAAAKKHHH..",
+  "..HHHKKAAAAAAAAAAKKHHH..",
+  "..hhhKKAAAAAAAAAAKKhhh..",
+  "..hhhKKAAAAAAAAAAKKhhh..",
+  "..RRRKKKAAAAAAAAKKKRRR..",
+  "..RRRKKKAAAAAAAAKKKRRR..",
+  "..RRRKKKKKKKKKKKKKKRRR..",
+  "..RRRKRRRRRRRRRRRKRRR...",
+  "........KKK..KKK........",
+  "........KKK..KKK........"
+];
+function drawPaoko(ctx, x, y, scale){
+  var s = scale || 4;
+  for (var r = 0; r < PAOKO_MAP.length; r++){
+    var row = PAOKO_MAP[r];
+    for (var c = 0; c < row.length; c++){
+      var ch = row.charAt(c);
+      if (ch === ".") continue;
+      var col = PAOKO_PALETTE[ch];
+      if (!col) continue;
+      ctx.fillStyle = col;
+      ctx.fillRect(Math.round(x + c * s), Math.round(y + r * s), Math.ceil(s), Math.ceil(s));
+    }
+  }
+}
+function paintPaokoCanvases(){
+  var list = document.querySelectorAll(".paokoCanvas");
+  for (var i = 0; i < list.length; i++){
+    var cv = list[i], ctx = cv.getContext("2d");
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    drawPaoko(ctx, 0, 0, Math.floor(cv.width / PAOKO_W));
+  }
+  var cheerCv = document.getElementById("cheerSprite");
+  if (cheerCv){ var c2 = cheerCv.getContext("2d"); c2.clearRect(0, 0, cheerCv.width, cheerCv.height); drawPaoko(c2, 0, 0, 2); }
+}
+// ============================================================
+// パオこ3Dラン — Three.js endless runner (3 lanes)
+// ============================================================
+var LANES = [-2.2, 0, 2.2];
+var VIEW_AHEAD = 120;      // spawn distance ahead (world moves toward +z)
+var state = "title";       // title | play | over
+var lane = 1;              // current target lane index
+var hearts = 3;
+var score = 0, dist = 0, coinCount = 0;
+var speed = 15, runTime = 0;
+var invincibleUntil = 0;
+var best = 0;
+try { best = parseInt(localStorage.getItem("paoko3d_best") || "0", 10) || 0; } catch(e){}
+
+var scoreBox = document.getElementById("scoreBox");
+var heartBox = document.getElementById("heartBox");
+var hud = document.getElementById("hud");
+var cheerEl = document.getElementById("cheer");
+var cheerText = document.getElementById("cheerText");
+var startPanel = document.getElementById("startPanel");
+var endPanel = document.getElementById("endPanel");
+var cheerTimer = null;
+function sayCheer(txt, hold){
+  cheerText.textContent = txt;
+  if (cheerTimer) clearTimeout(cheerTimer);
+  cheerTimer = setTimeout(function(){ cheerText.textContent = "がんばれ！"; }, hold || 1200);
+}
+function updateHud(){
+  scoreBox.textContent = "スコア " + Math.floor(score);
+  var h = "";
+  for (var i = 0; i < 3; i++) h += (i < hearts) ? "❤️" : "🤍";
+  heartBox.textContent = h;
+}
+
+// ---------- Three.js scene ----------
+var renderer, scene, camera, player, playerParts = {};
+var obstacles = [], coins = [], sceneries = [], dashes = [];
+var clock = null;
+
+function mat(color){ return new THREE.MeshLambertMaterial({ color: color }); }
+function box(w, h, d, color){
+  var m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(color));
+  m.castShadow = true;
+  return m;
+}
+
+function buildPlayer(){
+  var g = new THREE.Group();
+  // dress (black kimono-maid)
+  var dress = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.46, 0.62, 12), mat(0x26232e));
+  dress.position.y = 0.55; dress.castShadow = true; g.add(dress);
+  // apron (white, front)
+  var apron = box(0.4, 0.42, 0.05, 0xf6f3ee);
+  apron.position.set(0, 0.52, 0.30); apron.rotation.x = -0.12; g.add(apron);
+  // obi ribbon (red, back)
+  var obi = box(0.34, 0.16, 0.06, 0xd92b3a); obi.position.set(0, 0.72, -0.30); g.add(obi);
+  var obiL = box(0.16, 0.22, 0.05, 0xd92b3a); obiL.position.set(-0.14, 0.86, -0.31); obiL.rotation.z = 0.5; g.add(obiL);
+  var obiR = box(0.16, 0.22, 0.05, 0xd92b3a); obiR.position.set(0.14, 0.86, -0.31); obiR.rotation.z = -0.5; g.add(obiR);
+  // head
+  var head = new THREE.Mesh(new THREE.SphereGeometry(0.31, 20, 16), mat(0xffe2cf));
+  head.position.y = 1.14; head.castShadow = true; g.add(head);
+  // hair cap (silver, slightly back/up)
+  var hair = new THREE.Mesh(new THREE.SphereGeometry(0.335, 20, 16), mat(0xeceaf4));
+  hair.position.set(0, 1.20, -0.05); hair.scale.set(1, 0.92, 1); g.add(hair);
+  // face: cut look by adding a skin "face plate" sphere segment substitute:
+  var face = new THREE.Mesh(new THREE.SphereGeometry(0.295, 20, 16), mat(0xffe2cf));
+  face.position.set(0, 1.12, 0.045); face.scale.set(0.92, 0.9, 0.82); g.add(face);
+  // eyes
+  var eyeGeo = new THREE.SphereGeometry(0.035, 8, 8);
+  var eyeL = new THREE.Mesh(eyeGeo, mat(0x43307a)); eyeL.position.set(-0.11, 1.16, 0.30); g.add(eyeL);
+  var eyeR = new THREE.Mesh(eyeGeo, mat(0x43307a)); eyeR.position.set(0.11, 1.16, 0.30); g.add(eyeR);
+  // cheeks
+  var cheekGeo = new THREE.SphereGeometry(0.045, 8, 8);
+  var chL = new THREE.Mesh(cheekGeo, mat(0xffb3c8)); chL.position.set(-0.19, 1.06, 0.26); chL.scale.set(1, 0.7, 0.5); g.add(chL);
+  var chR = new THREE.Mesh(cheekGeo, mat(0xffb3c8)); chR.position.set(0.19, 1.06, 0.26); chR.scale.set(1, 0.7, 0.5); g.add(chR);
+  // twin tails: silver upper cone + red lower cone, each side
+  function tail(side){
+    var t = new THREE.Group();
+    var up = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.55, 10), mat(0xeceaf4));
+    up.position.y = -0.24; up.rotation.x = Math.PI; t.add(up);
+    var lo = new THREE.Mesh(new THREE.ConeGeometry(0.085, 0.45, 10), mat(0xd92b3a));
+    lo.position.y = -0.68; lo.rotation.x = Math.PI; t.add(lo);
+    var sakura = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 8), mat(0xf8a9c9));
+    sakura.scale.set(1, 0.6, 1); t.add(sakura);
+    t.position.set(0.30 * side, 1.38, -0.02);
+    t.rotation.z = 0.35 * side;
+    return t;
+  }
+  var tailL = tail(-1), tailR = tail(1);
+  g.add(tailL); g.add(tailR);
+  // arms
+  function arm(side){
+    var a = new THREE.Group();
+    var m = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.055, 0.42, 8), mat(0x26232e));
+    m.position.y = -0.18; m.castShadow = true; a.add(m);
+    var hand = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), mat(0xffe2cf));
+    hand.position.y = -0.40; a.add(hand);
+    a.position.set(0.34 * side, 0.82, 0);
+    return a;
+  }
+  var armL = arm(-1), armR = arm(1);
+  g.add(armL); g.add(armR);
+  // legs
+  function leg(side){
+    var l = new THREE.Group();
+    var m = box(0.13, 0.30, 0.15, 0x3c3a48);
+    m.position.y = -0.15; l.add(m);
+    var shoe = box(0.14, 0.08, 0.24, 0xd92b3a);
+    shoe.position.set(0, -0.30, 0.04); l.add(shoe);
+    l.position.set(0.14 * side, 0.28, 0);
+    return l;
+  }
+  var legL = leg(-1), legR = leg(1);
+  g.add(legL); g.add(legR);
+  playerParts = { armL: armL, armR: armR, legL: legL, legR: legR, tailL: tailL, tailR: tailR };
+  return g;
+}
+
+function makeTree(x, z){
+  var g = new THREE.Group();
+  var trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.2, 1.1, 8), mat(0x8a5a33));
+  trunk.position.y = 0.55; trunk.castShadow = true; g.add(trunk);
+  var greens = [0x3fae5a, 0x2f9e4f, 0x62c370, 0x1f8a70];
+  var c = greens[Math.floor(Math.random() * greens.length)];
+  var fol = new THREE.Mesh(new THREE.ConeGeometry(0.95, 2.1, 10), mat(c));
+  fol.position.y = 2.0; fol.castShadow = true; g.add(fol);
+  var fol2 = new THREE.Mesh(new THREE.ConeGeometry(0.7, 1.5, 10), mat(c));
+  fol2.position.y = 3.0; g.add(fol2);
+  g.position.set(x, 0, z);
+  var s = 0.85 + Math.random() * 0.5;
+  g.scale.set(s, s, s);
+  return g;
+}
+function makeCloud(x, y, z){
+  var g = new THREE.Group();
+  var m = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.92 });
+  for (var i = 0; i < 4; i++){
+    var s = new THREE.Mesh(new THREE.SphereGeometry(0.9 + Math.random() * 0.9, 10, 8), m);
+    s.position.set(i * 1.1 - 1.6, Math.random() * 0.4, Math.random() * 0.6);
+    s.scale.y = 0.55;
+    g.add(s);
+  }
+  g.position.set(x, y, z);
+  return g;
+}
+
+function makeObstacle(kind){
+  var g = new THREE.Group();
+  if (kind === 0){ // barrier: red/white
+    var base = box(1.9, 0.75, 0.35, 0xffffff); base.position.y = 0.55; g.add(base);
+    var stripe = box(1.92, 0.28, 0.37, 0xd92b3a); stripe.position.y = 0.55; g.add(stripe);
+    var legA = box(0.12, 0.35, 0.5, 0x555566); legA.position.set(-0.8, 0.17, 0); g.add(legA);
+    var legB = box(0.12, 0.35, 0.5, 0x555566); legB.position.set(0.8, 0.17, 0); g.add(legB);
+  } else if (kind === 1){ // traffic cone
+    var cone = new THREE.Mesh(new THREE.ConeGeometry(0.42, 1.05, 14), mat(0xff7a1a));
+    cone.position.y = 0.62; cone.castShadow = true; g.add(cone);
+    var band = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.31, 0.22, 14), mat(0xffffff));
+    band.position.y = 0.62; g.add(band);
+    var bs = box(0.95, 0.1, 0.95, 0xe8640f); bs.position.y = 0.05; g.add(bs);
+  } else { // rock
+    var rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.62, 0), mat(0x8d8fa3));
+    rock.position.y = 0.5; rock.rotation.set(0.4, 0.7, 0.2); rock.castShadow = true; g.add(rock);
+    var rock2 = new THREE.Mesh(new THREE.DodecahedronGeometry(0.36, 0), mat(0x76788c));
+    rock2.position.set(0.55, 0.28, 0.2); g.add(rock2);
+  }
+  return g;
+}
+function makeCoin(){
+  var g = new THREE.Group();
+  var coin = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.46, 0.1, 22),
+    new THREE.MeshLambertMaterial({ color: 0xffc61a, emissive: 0x8a6100 }));
+  coin.rotation.x = Math.PI / 2;
+  g.add(coin);
+  var inner = new THREE.Mesh(new THREE.CylinderGeometry(0.30, 0.30, 0.12, 22),
+    new THREE.MeshLambertMaterial({ color: 0xffe066, emissive: 0x8a6100 }));
+  inner.rotation.x = Math.PI / 2;
+  g.add(inner);
+  g.position.y = 0.85;
+  return g;
+}
+
+function initThree(){
+  var glBox = document.getElementById("gl");
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  glBox.appendChild(renderer.domElement);
+
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x7ec8f7);
+  scene.fog = new THREE.Fog(0x7ec8f7, 55, 165);
+
+  camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 400);
+  camera.position.set(0, 4.7, 8.2);
+
+  scene.add(new THREE.HemisphereLight(0xcfeaff, 0x5da24a, 0.95));
+  var sun = new THREE.DirectionalLight(0xffffff, 0.85);
+  sun.position.set(18, 30, 12);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1024, 1024);
+  sun.shadow.camera.left = -16; sun.shadow.camera.right = 16;
+  sun.shadow.camera.top = 20; sun.shadow.camera.bottom = -30;
+  sun.shadow.camera.far = 90;
+  scene.add(sun);
+  scene.userData.sun = sun;
+
+  // grass
+  var grass = new THREE.Mesh(new THREE.PlaneGeometry(300, 340), mat(0x69c24f));
+  grass.rotation.x = -Math.PI / 2;
+  grass.position.set(0, -0.02, -120);
+  grass.receiveShadow = true;
+  scene.add(grass);
+  // road
+  var road = new THREE.Mesh(new THREE.PlaneGeometry(7.6, 340), mat(0x4a4a58));
+  road.rotation.x = -Math.PI / 2;
+  road.position.set(0, 0, -120);
+  road.receiveShadow = true;
+  scene.add(road);
+  // road edges
+  [-3.9, 3.9].forEach(function(x){
+    var edge = new THREE.Mesh(new THREE.PlaneGeometry(0.28, 340), mat(0xffffff));
+    edge.rotation.x = -Math.PI / 2;
+    edge.position.set(x, 0.005, -120);
+    scene.add(edge);
+  });
+  // lane dashes (recycled)
+  for (var i = 0; i < 26; i++){
+    [-1.1, 1.1].forEach(function(x){
+      var d = new THREE.Mesh(new THREE.PlaneGeometry(0.14, 2.2), mat(0xfff3a0));
+      d.rotation.x = -Math.PI / 2;
+      d.position.set(x, 0.006, 14 - i * 6);
+      scene.add(d);
+      dashes.push(d);
+    });
+  }
+  // side scenery: trees + clouds (recycled)
+  for (var t = 0; t < 26; t++){
+    var side = (t % 2 === 0) ? -1 : 1;
+    var tree = makeTree(side * (6.2 + Math.random() * 5.5), 16 - t * 6.4 - Math.random() * 3);
+    scene.add(tree);
+    sceneries.push(tree);
+  }
+  for (var c = 0; c < 7; c++){
+    var cloud = makeCloud(-30 + Math.random() * 60, 13 + Math.random() * 7, -20 - c * 22);
+    scene.add(cloud);
+    sceneries.push(cloud);
+  }
+  // player
+  player = buildPlayer();
+  player.position.set(0, 0, 0);
+  scene.add(player);
+
+  window.addEventListener("resize", onResize);
+  clock = new THREE.Clock();
+}
+function onResize(){
+  if (!renderer) return;
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+// ---------- spawning ----------
+var nextSpawnAt = 40; // distance of next obstacle row
+function spawnRow(){
+  var blocked = [];
+  var nBlock = (Math.random() < 0.45 && dist > 120) ? 2 : 1;
+  var order = [0, 1, 2];
+  // shuffle
+  for (var i = order.length - 1; i > 0; i--){
+    var j = Math.floor(Math.random() * (i + 1));
+    var tmp = order[i]; order[i] = order[j]; order[j] = tmp;
+  }
+  for (var b = 0; b < nBlock; b++) blocked.push(order[b]);
+  for (var k = 0; k < blocked.length; k++){
+    var ob = makeObstacle(Math.floor(Math.random() * 3));
+    ob.position.set(LANES[blocked[k]], 0, -VIEW_AHEAD);
+    ob.userData.lane = blocked[k];
+    scene.add(ob);
+    obstacles.push(ob);
+  }
+  // coins: line of 3 in a free lane (70%), or a single coin (20%)
+  var free = [0, 1, 2].filter(function(l){ return blocked.indexOf(l) < 0; });
+  var r = Math.random();
+  if (free.length && r < 0.7){
+    var cl = free[Math.floor(Math.random() * free.length)];
+    for (var n = 0; n < 3; n++){
+      var coin = makeCoin();
+      coin.position.set(LANES[cl], 0.85, -VIEW_AHEAD - n * 3.2);
+      coin.userData.lane = cl;
+      scene.add(coin);
+      coins.push(coin);
+    }
+  } else if (free.length && r < 0.9){
+    var cl2 = free[Math.floor(Math.random() * free.length)];
+    var coin2 = makeCoin();
+    coin2.position.set(LANES[cl2], 0.85, -VIEW_AHEAD);
+    coin2.userData.lane = cl2;
+    scene.add(coin2);
+    coins.push(coin2);
+  }
+  var gap = 13 + Math.random() * 7 - Math.min(4, speed * 0.08);
+  nextSpawnAt = dist + Math.max(10, gap);
+}
+
+// ---------- game flow ----------
+function startGame(){
+  // clear field
+  for (var i = 0; i < obstacles.length; i++) scene.remove(obstacles[i]);
+  for (var j = 0; j < coins.length; j++) scene.remove(coins[j]);
+  obstacles = []; coins = [];
+  lane = 1; hearts = 3; score = 0; dist = 0; coinCount = 0;
+  speed = 15; runTime = 0; invincibleUntil = 0;
+  nextSpawnAt = 26;
+  player.position.x = 0;
+  player.visible = true;
+  state = "play";
+  startPanel.classList.add("hidden");
+  endPanel.classList.add("hidden");
+  hud.classList.remove("hidden");
+  cheerEl.classList.remove("hidden");
+  updateHud();
+  sayCheer("がんばれ！", 900);
+}
+function gameOver(){
+  state = "over";
+  if (Math.floor(score) > best){
+    best = Math.floor(score);
+    try { localStorage.setItem("paoko3d_best", String(best)); } catch(e){}
+  }
+  document.getElementById("score-final").textContent =
+    Math.floor(score) + "点（コイン " + coinCount + "枚・" + Math.floor(dist) + "m）";
+  document.getElementById("best-line").textContent = "ベスト: " + best + "点";
+  hud.classList.add("hidden");
+  cheerEl.classList.add("hidden");
+  endPanel.classList.remove("hidden");
+}
+function hitObstacle(ob){
+  scene.remove(ob);
+  obstacles.splice(obstacles.indexOf(ob), 1);
+  hearts--;
+  updateHud();
+  if (hearts <= 0){ gameOver(); return; }
+  invincibleUntil = runTime + 1.6;
+  sayCheer("いたた…でも大丈夫！", 1300);
+}
+
+// ---------- main loop ----------
+var camShake = 0;
+function animate(){
+  requestAnimationFrame(animate);
+  if (!clock) return;
+  var dt = Math.min(clock.getDelta(), 0.05);
+  var t = clock.elapsedTime;
+
+  if (state === "play"){
+    runTime += dt;
+    speed = Math.min(36, 15 + runTime * 0.45);
+    dist += speed * dt;
+    score = dist + coinCount * 50;
+    updateHud();
+    if (dist >= nextSpawnAt) spawnRow();
+
+    // move world toward player
+    var dz = speed * dt;
+    for (var i = obstacles.length - 1; i >= 0; i--){
+      var ob = obstacles[i];
+      ob.position.z += dz;
+      if (ob.position.z > 12){ scene.remove(ob); obstacles.splice(i, 1); }
+    }
+    for (var j = coins.length - 1; j >= 0; j--){
+      var cn = coins[j];
+      cn.position.z += dz;
+      cn.rotation.y += dt * 3.2;
+      if (cn.position.z > 12){ scene.remove(cn); coins.splice(j, 1); }
+    }
+    // collisions
+    var px = player.position.x;
+    for (var a = obstacles.length - 1; a >= 0; a--){
+      var o = obstacles[a];
+      if (Math.abs(o.position.z) < 0.85 && Math.abs(o.position.x - px) < 1.05){
+        if (runTime >= invincibleUntil){ camShake = 0.35; hitObstacle(o); if (state !== "play") break; }
+      }
+    }
+    if (state === "play"){
+      for (var b = coins.length - 1; b >= 0; b--){
+        var c2 = coins[b];
+        if (Math.abs(c2.position.z) < 0.95 && Math.abs(c2.position.x - px) < 1.05){
+          scene.remove(c2); coins.splice(b, 1);
+          coinCount++;
+          score = dist + coinCount * 50;
+          updateHud();
+          sayCheer("コイン ゲット！", 800);
+        }
+      }
+    }
+  }
+  // dashes & scenery always drift (also on title, slow)
+  var drift = (state === "play") ? speed * dt : 2.2 * dt;
+  for (var d = 0; d < dashes.length; d++){
+    dashes[d].position.z += drift;
+    if (dashes[d].position.z > 16) dashes[d].position.z -= 26 * 6;
+  }
+  for (var s = 0; s < sceneries.length; s++){
+    var sc = sceneries[s];
+    sc.position.z += drift * (sc.position.y > 8 ? 0.25 : 1);
+    if (sc.position.z > 18){
+      sc.position.z -= 175;
+      if (sc.position.y <= 8) sc.position.x = (Math.random() < 0.5 ? -1 : 1) * (6.2 + Math.random() * 5.5);
+    }
+  }
+  // player animation
+  var targetX = LANES[lane];
+  player.position.x += (targetX - player.position.x) * Math.min(1, dt * 11);
+  player.rotation.z = (player.position.x - targetX) * -0.14;
+  var runFreq = (state === "play") ? (9 + speed * 0.35) : 2.2;
+  var sw = Math.sin(t * runFreq);
+  playerParts.legL.rotation.x = sw * 0.85;
+  playerParts.legR.rotation.x = -sw * 0.85;
+  playerParts.armL.rotation.x = -sw * 0.7;
+  playerParts.armR.rotation.x = sw * 0.7;
+  playerParts.tailL.rotation.x = Math.sin(t * runFreq * 0.5) * 0.12;
+  playerParts.tailR.rotation.x = Math.cos(t * runFreq * 0.5) * 0.12;
+  player.position.y = (state === "play") ? Math.abs(Math.cos(t * runFreq)) * 0.09 : Math.sin(t * 2.2) * 0.03;
+  // invincibility blink
+  if (state === "play" && runTime < invincibleUntil){
+    player.visible = (Math.floor(t * 14) % 2 === 0);
+  } else if (state === "play"){
+    player.visible = true;
+  }
+  // camera follow + shake
+  var shX = 0, shY = 0;
+  if (camShake > 0){
+    camShake -= dt;
+    shX = (Math.random() - 0.5) * 0.22;
+    shY = (Math.random() - 0.5) * 0.22;
+  }
+  camera.position.x += ((player.position.x * 0.55) - camera.position.x) * Math.min(1, dt * 5);
+  camera.position.x += shX;
+  camera.position.y = 4.7 + shY;
+  camera.lookAt(player.position.x * 0.7, 1.0, -12);
+  // sun follows player area for shadows
+  if (scene.userData.sun){
+    scene.userData.sun.target = player;
+  }
+  renderer.render(scene, camera);
+}
+
+// ---------- input ----------
+function moveLane(dir){
+  if (state !== "play") return;
+  lane = Math.max(0, Math.min(2, lane + dir));
+}
+document.addEventListener("keydown", function(e){
+  if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A"){ moveLane(-1); e.preventDefault(); }
+  else if (e.key === "ArrowRight" || e.key === "d" || e.key === "D"){ moveLane(1); e.preventDefault(); }
+  else if ((e.key === " " || e.key === "Enter")){
+    if (state === "title") startGame();
+    else if (state === "over") startGame();
+    e.preventDefault();
+  }
+});
+var touchX = null, touchY = null;
+document.addEventListener("touchstart", function(e){
+  if (e.touches.length === 1){ touchX = e.touches[0].clientX; touchY = e.touches[0].clientY; }
+}, { passive: true });
+document.addEventListener("touchend", function(e){
+  if (touchX === null) return;
+  var endX = e.changedTouches[0].clientX;
+  var dx = endX - touchX;
+  if (state === "play"){
+    if (Math.abs(dx) > 28){ moveLane(dx > 0 ? 1 : -1); }
+    else if (e.target === renderer.domElement){
+      moveLane(endX < window.innerWidth / 2 ? -1 : 1);
+    }
+  }
+  touchX = null;
+}, { passive: true });
+document.addEventListener("mousedown", function(e){
+  if (state === "play" && renderer && e.target === renderer.domElement){
+    moveLane(e.clientX < window.innerWidth / 2 ? -1 : 1);
+  }
+});
+
+document.getElementById("startBtn").addEventListener("click", startGame);
+document.getElementById("restartBtn").addEventListener("click", startGame);
+
+// ---------- boot ----------
+paintPaokoCanvases();
+try {
+  initThree();
+  ytFirstFrame();
+  animate();
+} catch(err){
+  var eb = document.getElementById("errBox");
+  eb.classList.remove("hidden");
+  eb.textContent = "3Dの初期化に失敗しました：" + (err && err.message ? err.message : err);
+}
+// QA/debug handle (harmless): lets automated checks read/steer game state.
+window.__paokoRun = {
+  getState: function(){ return state; },
+  getHearts: function(){ return hearts; },
+  getScore: function(){ return Math.floor(score); },
+  setHearts: function(n){ hearts = n; },
+  start: function(){ startGame(); },
+  move: function(d){ moveLane(d); },
+  debug: function(){
+    var nz = null;
+    for (var i = 0; i < obstacles.length; i++) if (nz === null || obstacles[i].position.z > nz) nz = obstacles[i].position.z;
+    return { obs: obstacles.length, coins: coins.length, nearestObsZ: nz, dist: Math.floor(dist) };
+  }
+};
+})();
+</script>
+</body>
+</html>

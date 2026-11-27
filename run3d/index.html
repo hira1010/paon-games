@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>パオこ3Dラン</title>
+<title>パオリン3Dラン</title>
 <script src="https://www.youtube.com/game_api/v1"></script>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
@@ -59,9 +59,9 @@
   <div id="ui">
     <div class="panel" id="startPanel">
       <canvas class="paokoCanvas" width="96" height="112"></canvas>
-      <div class="paoko-cap">マスコット：パオこ</div>
-      <h1>🏃‍♀️ パオこ3Dラン</h1>
-      <p>パオこが3レーンのコースを走り続けるよ！<br>
+      <div class="paoko-cap">マスコット：パオリン</div>
+      <h1>🏃‍♀️ パオリン3Dラン</h1>
+      <p>パオリンが3レーンのコースを走り続けるよ！<br>
       ← →キー（またはスワイプ／画面タップ）でレーン移動。<br>
       障害物をよけて、🪙コイン（+50点）を集めよう。<br>
       ハートは3つ。ぶつかると1つ減るよ。だんだん速くなる！</p>
@@ -69,7 +69,7 @@
     </div>
     <div class="panel hidden" id="endPanel">
       <canvas class="paokoCanvas" width="96" height="112"></canvas>
-      <div class="paoko-cap">マスコット：パオこ</div>
+      <div class="paoko-cap">マスコット：パオリン</div>
       <h1>おつかれさま！</h1>
       <div id="score-final">0点</div>
       <p id="best-line">ベスト: 0点</p>
@@ -87,7 +87,7 @@ var ytReady = false;
 function ytCall(fn){ try{ if (typeof ytgame !== "undefined" && ytgame && typeof ytgame[fn] === "function"){ ytgame[fn](); } }catch(e){} }
 function ytFirstFrame(){ if(!ytReady){ ytReady = true; ytCall("firstFrameReady"); ytCall("gameReady"); } }
 
-// --- Mascot パオこ (master: ~/workspace/playables/mascot_sprite.js) ---
+// --- Mascot パオリン (master: ~/workspace/playables/mascot_sprite.js) ---
 var PAOKO_W = 24, PAOKO_H = 28;
 var PAOKO_PALETTE = {
   "H": "#eceaf4", "h": "#b9b7cc", "S": "#ffe2cf", "E": "#43307a",
@@ -149,7 +149,7 @@ function paintPaokoCanvases(){
   if (cheerCv){ var c2 = cheerCv.getContext("2d"); c2.clearRect(0, 0, cheerCv.width, cheerCv.height); drawPaoko(c2, 0, 0, 2); }
 }
 // ============================================================
-// パオこ3Dラン — Three.js endless runner (3 lanes)
+// パオリン3Dラン — Three.js endless runner (3 lanes)
 // ============================================================
 var LANES = [-2.2, 0, 2.2];
 var VIEW_AHEAD = 120;      // spawn distance ahead (world moves toward +z)

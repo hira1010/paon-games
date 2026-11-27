@@ -34,7 +34,7 @@
   <div id="ui">
     <div class="panel" id="startPanel">
       <canvas class="paokoCanvas" width="96" height="112"></canvas>
-      <div class="paoko-cap">マスコット：パオこ</div>
+      <div class="paoko-cap">マスコット：パオリン</div>
       <h1>🍎 フルーツキャッチ</h1>
       <p>カゴを左右に動かして、落ちてくる<br>フルーツをキャッチしよう！<br>
       🍎🍊🍇 は +10点、金の実は +30点。<br>💣 爆弾と 🪨 岩はさけてね。3回当たると終了！<br>制限時間は60秒。</p>
@@ -42,7 +42,7 @@
     </div>
     <div class="panel hidden" id="endPanel">
       <canvas class="paokoCanvas" width="96" height="112"></canvas>
-      <div class="paoko-cap">マスコット：パオこ</div>
+      <div class="paoko-cap">マスコット：パオリン</div>
       <h1>おつかれさま！</h1>
       <div id="score-final">0点</div>
       <p id="best-line">ベスト: 0点</p>
@@ -58,7 +58,7 @@ var ytReady = false;
 function ytCall(fn){ try{ if (typeof ytgame !== "undefined" && ytgame && typeof ytgame[fn] === "function"){ ytgame[fn](); } }catch(e){} }
 function ytFirstFrame(){ if(!ytReady){ ytReady = true; ytCall("firstFrameReady"); ytCall("gameReady"); } }
 
-// --- Mascot パオこ (master: ~/workspace/playables/mascot_sprite.js) ---
+// --- Mascot パオリン (master: ~/workspace/playables/mascot_sprite.js) ---
 var PAOKO_W = 24, PAOKO_H = 28;
 var PAOKO_PALETTE = {
   "H": "#eceaf4", "h": "#b9b7cc", "S": "#ffe2cf", "E": "#43307a",

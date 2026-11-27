@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>パオンのゲーム工房 — 遊べるゲーム集</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:"Hiragino Maru Gothic ProN","Hiragino Sans","Noto Sans JP",sans-serif;
+    background:linear-gradient(180deg,#141433 0%,#1d2b53 60%,#29366b 100%); color:#fff;
+    min-height:100vh; padding:32px 16px 48px; }
+  .wrap { max-width:640px; margin:0 auto; }
+  h1 { font-size:clamp(24px,6vw,36px); text-align:center; margin-bottom:8px; }
+  .sub { text-align:center; color:#cdd6ff; font-size:15px; line-height:1.8; margin-bottom:28px; }
+  .mascot { background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.18);
+    border-radius:16px; padding:14px 18px; margin-bottom:28px; font-size:14.5px; line-height:1.8; }
+  .mascot b { color:#ff9eb5; }
+  a.card { display:block; text-decoration:none; color:#fff; background:rgba(255,255,255,.1);
+    border:1px solid rgba(255,255,255,.2); border-radius:18px; padding:20px 22px; margin-bottom:16px;
+    transition:transform .08s ease, background .15s ease; }
+  a.card:hover { background:rgba(255,255,255,.16); }
+  a.card:active { transform:scale(.98); }
+  .card .emoji { font-size:34px; }
+  .card h2 { font-size:21px; margin:6px 0 6px; }
+  .card p { color:#dbe2ff; font-size:14.5px; line-height:1.7; }
+  .card .play { display:inline-block; margin-top:12px; background:#e33e5f; color:#fff; font-weight:bold;
+    border-radius:999px; padding:8px 22px; font-size:15px; }
+  footer { text-align:center; color:#93a0d8; font-size:12.5px; margin-top:32px; line-height:1.8; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🎮 パオンのゲーム工房</h1>
+  <p class="sub">遊べるゲーム集<br>ぜんぶ無料・登録なし・スマホでも遊べます</p>
+
+  <div class="mascot">🎀 工房のマスコットは <b>パオこ</b>（銀→赤グラデのツインテール、着物メイドの応援係）。どのゲームにも登場します。プロレスゲームではリングサイドで応援してくれるよ！</div>
+
+  <a class="card" href="wrestling/">
+    <div class="emoji">🤼</div>
+    <h2>プロレスゲーム RED FALCON vs BLUE BOMBER</h2>
+    <p>バーチャルプロレス風3Dシングルマッチ。技を出してダウンさせ、フォールで3カウントを取れば勝ち。リングサイドではパオこが応援中！</p>
+    <span class="play">▶ あそぶ</span>
+  </a>
+
+  <a class="card" href="fruit/">
+    <div class="emoji">🍎</div>
+    <h2>フルーツキャッチ</h2>
+    <p>カゴを左右に動かして、落ちてくるフルーツをキャッチ！ 金の実は+30点。爆弾と岩はさけてね。制限時間60秒。</p>
+    <span class="play">▶ あそぶ</span>
+  </a>
+
+  <a class="card" href="breakout/">
+    <div class="emoji">🧱</div>
+    <h2>ピクセルブロック崩し</h2>
+    <p>パドルでボールを打ち返してピクセルブロックを全部壊そう。連続で壊すとコンボボーナス。レベルアップでボール加速！</p>
+    <span class="play">▶ あそぶ</span>
+  </a>
+
+  <footer>パオンのゲーム工房（YouTubeチャンネル連動）<br>全年齢向け・外部トラッキングなし</footer>
+</div>
+</body>
+</html>

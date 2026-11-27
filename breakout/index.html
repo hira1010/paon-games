@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ピクセルブロック崩し</title>
+<script src="https://www.youtube.com/game_api/v1"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { width:100%; height:100%; overflow:hidden; background:#070718;
+    font-family:"Hiragino Sans","Noto Sans JP",sans-serif;
+    touch-action:none; user-select:none; -webkit-user-select:none; }
+  #wrap { position:relative; width:100%; height:100%; }
+  canvas { display:block; width:100%; height:100%; }
+  #ui { position:absolute; inset:0; pointer-events:none; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; }
+  .panel { pointer-events:auto; background:rgba(10,10,40,.92); border:3px solid #00e5c7;
+    border-radius:6px; padding:28px 34px; text-align:center;
+    box-shadow:0 0 0 3px #7b4dff, 0 10px 34px rgba(0,0,0,.6); max-width:90vw; color:#eaf6ff; }
+  .panel h1 { font-size:clamp(24px,6vw,38px); color:#00e5c7; margin-bottom:10px;
+    text-shadow:3px 3px 0 #7b4dff; letter-spacing:1px; }
+  .panel p { font-size:clamp(13px,3.4vw,16px); line-height:1.8; margin-bottom:16px; color:#cfd8ff; }
+  button { pointer-events:auto; font-family:inherit; font-size:clamp(17px,4.5vw,21px); font-weight:bold;
+    color:#0b0b2a; background:linear-gradient(180deg,#00e5c7,#00b8d9); border:none; border-radius:4px;
+    padding:13px 36px; cursor:pointer; box-shadow:0 4px 0 #7b4dff; }
+  button:active { transform:translateY(3px); box-shadow:0 1px 0 #7b4dff; }
+  .hidden { display:none !important; }
+  #score-final { font-size:clamp(20px,5vw,28px); color:#00e5c7; font-weight:bold; margin-bottom:6px; }
+  .paokoCanvas { display:block; margin:0 auto 4px; }
+  .paoko-cap { font-size:12px; color:#8f9bff; margin-bottom:8px; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game"></canvas>
+  <div id="ui">
+    <div class="panel" id="startPanel">
+      <canvas class="paokoCanvas" width="96" height="112"></canvas>
+      <div class="paoko-cap">マスコット：パオこ</div>
+      <h1>ピクセルブロック崩し</h1>
+      <p>パドルを動かしてボールを打ち返し、<br>ピクセルのブロックを全部こわそう！<br>
+      パドルに当てずに連続でこわすとコンボボーナス。<br>ボールはタップ／クリック／スペースで発射。<br>ライフは3つ。全部こわすとレベルアップ！</p>
+      <button id="startBtn">スタート</button>
+    </div>
+    <div class="panel hidden" id="endPanel">
+      <canvas class="paokoCanvas" width="96" height="112"></canvas>
+      <div class="paoko-cap">マスコット：パオこ</div>
+      <h1>ゲームオーバー</h1>
+      <div id="score-final">0点</div>
+      <p id="best-line">到達レベル: 1　ベスト: 0点</p>
+      <button id="restartBtn">もう一度あそぶ</button>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+"use strict";
+// --- YouTube Playables SDK (optional, fully guarded) ---
+var ytReady = false;
+function ytCall(fn){ try{ if (typeof ytgame !== "undefined" && ytgame && typeof ytgame[fn] === "function"){ ytgame[fn](); } }catch(e){} }
+function ytFirstFrame(){ if(!ytReady){ ytReady = true; ytCall("firstFrameReady"); ytCall("gameReady"); } }
+
+// --- Mascot パオこ (master: ~/workspace/playables/mascot_sprite.js) ---
+var PAOKO_W = 24, PAOKO_H = 28;
+var PAOKO_PALETTE = {
+  "H": "#eceaf4", "h": "#b9b7cc", "S": "#ffe2cf", "E": "#43307a",
+  "W": "#ffffff", "c": "#ffb3c8", "m": "#e2607a", "K": "#26232e",
+  "R": "#d92b3a", "A": "#f6f3ee", "D": "#3c3a48", "P": "#f8a9c9"
+};
+var PAOKO_MAP = [
+  ".......HHHHHHHHHH.......",
+  ".....HHHHHHHHHHHHHH.....",
+  "...HHHHHHHHHHHHHHHHHH...",
+  "..PPHHHHHHHHHHHHHHHHPP..",
+  "..HHHHHHHHHHHHHHHHHHHH..",
+  "..HHHHHSSSSSSSSSSHHHHH..",
+  "..HHHHHSEESSSSSESHHHHH..",
+  "..HHHHHSWESSSSEWSHHHHH..",
+  "..HHHHHcSSSSSSSScHHHHH..",
+  "..HHHHHSSSSmmSSSSHHHHH..",
+  "..HHHHHSSSSSSSSSSHHHHH..",
+  "..HHHKKRRKKSSKKRRKKHHH..",
+  "..HHHKRKKKKKKKKKKRKHHH..",
+  "..HHHRRRRRRRRRRRRRRHHH..",
+  "..HHHKKAAAAAAAAAAKKHHH..",
+  "..HHHKKAAAAAAAAAAKKHHH..",
+  "..HHHKKAAADDDDAAAKKHHH..",
+  "..HHHKKAAADDRDAAAKKHHH..",
+  "..HHHKKAAAAAAAAAAKKHHH..",
+  "..HHHKKAAAAAAAAAAKKHHH..",
+  "..hhhKKAAAAAAAAAAKKhhh..",
+  "..hhhKKAAAAAAAAAAKKhhh..",
+  "..RRRKKKAAAAAAAAKKKRRR..",
+  "..RRRKKKAAAAAAAAKKKRRR..",
+  "..RRRKKKKKKKKKKKKKKRRR..",
+  "..RRRKRRRRRRRRRRRKRRR...",
+  "........KKK..KKK........",
+  "........KKK..KKK........"
+];
+function drawPaoko(ctx, x, y, scale){
+  var s = scale || 4;
+  for (var r = 0; r < PAOKO_MAP.length; r++){
+    var row = PAOKO_MAP[r];
+    for (var c = 0; c < row.length; c++){
+      var ch = row.charAt(c);
+      if (ch === ".") continue;
+      var col = PAOKO_PALETTE[ch];
+      if (!col) continue;
+      ctx.fillStyle = col;
+      ctx.fillRect(Math.round(x + c * s), Math.round(y + r * s), Math.ceil(s), Math.ceil(s));
+    }
+  }
+}
+function drawPaokoCanvases(){
+  var list = document.querySelectorAll(".paokoCanvas");
+  for (var i = 0; i < list.length; i++){
+    try{
+      var g = list[i].getContext("2d");
+      if (g){ g.imageSmoothingEnabled = false; drawPaoko(g, 0, 0, 4); }
+    }catch(e){}
+  }
+}
+function drawPaokoCorner(){
+  // Paoko cheers from the bottom-left corner during play / on the result screen.
+  var bob = Math.round(Math.sin(Date.now() / 280) * 2);
+  drawPaoko(ctx, 8, H - 60 + bob, 2);
+  if (state === STATE.PLAY){
+    ctx.fillStyle = "rgba(234,246,255,0.9)"; ctx.font = "bold 12px sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
+    ctx.fillText("がんばれ！", 32, H - 64 + bob);
+  }
+}
+
+var canvas = document.getElementById("game");
+var ctx = canvas.getContext("2d");
+var W = 0, H = 0, DPR = 1;
+function resize(){
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = Math.floor(W * DPR); canvas.height = Math.floor(H * DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  paddle.x = Math.max(paddle.w/2, Math.min(W - paddle.w/2, paddle.x));
+  paddle.targetX = paddle.x;
+}
+window.addEventListener("resize", resize);
+
+// --- Audio: WebAudio beeps, created only after a user gesture ---
+var audioCtx = null;
+function beep(freq, dur, type){
+  try{
+    if(!audioCtx) return;
+    var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = type || "square"; o.frequency.value = freq;
+    g.gain.setValueAtTime(0.06, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(); o.stop(audioCtx.currentTime + dur);
+  }catch(e){}
+}
+function initAudio(){ try{ if(!audioCtx){ audioCtx = new (window.AudioContext||window.webkitAudioContext)(); } if(audioCtx.state==="suspended") audioCtx.resume(); }catch(e){} }
+
+// --- Game state ---
+var STATE = { MENU:0, PLAY:1, OVER:2 };
+var state = STATE.MENU;
+var COLS = 10;
+var ROW_COLORS = ["#00e5c7","#00b8d9","#3d7bff","#7b4dff","#b04dff","#e040fb"];
+var PATTERNS = [
+  [ "1111111111",
+    "1111111111",
+    "1111111111",
+    "1111111111" ],
+  [ "1212121212",
+    "1111111111",
+    ".11111111.",
+    "..111111..",
+    "1111111111" ],
+  [ "2222222222",
+    "1111111111",
+    "2.111111.2",
+    "1111111111",
+    "1122222211" ],
+  [ "2.2.22.2.2",
+    "2222222222",
+    ".22222222.",
+    "1111111111",
+    "2222222222" ]
+];
+var paddle = { x: 0, w: 96, h: 14, targetX: 0 };
+var ball = { x: 0, y: 0, r: 8, vx: 0, vy: 0, launched: false, wait: 0 };
+var bricks = []; // {col,row,hp,maxHp}
+var score = 0, best = 0, lives = 3, level = 1, combo = 0;
+var keys = { left:false, right:false };
+var lastTs = 0, rafId = null, paused = false;
+
+function paddleY(){ return H - 56; }
+function brickGeom(){
+  var side = Math.max(10, Math.min(46, W * 0.06));
+  var gw = W - side * 2;
+  var bw = gw / COLS;
+  var bh = Math.max(16, Math.min(26, H * 0.035));
+  return { x0: side, y0: 64, bw: bw, bh: bh, gap: 4 };
+}
+function ballSpeed(){ return (300 + (level - 1) * 36) * Math.max(0.8, Math.min(1.25, Math.min(W, H) / 420)); }
+function buildLevel(){
+  var pat = PATTERNS[(level - 1) % PATTERNS.length];
+  bricks = [];
+  for (var r = 0; r < pat.length; r++){
+    for (var c = 0; c < COLS; c++){
+      var ch = pat[r].charAt(c);
+      if (ch === "1" || ch === "2"){
+        var hp = (ch === "2") ? 2 : 1;
+        bricks.push({ col: c, row: r, hp: hp, maxHp: hp });
+      }
+    }
+  }
+  combo = 0;
+  resetBall();
+}
+function resetBall(){
+  ball.launched = false; ball.wait = 1.1;
+  ball.vx = 0; ball.vy = 0;
+  ball.x = paddle.x; ball.y = paddleY() - ball.r - 1;
+}
+function launchBall(){
+  if (state !== STATE.PLAY || ball.launched) return;
+  var sp = ballSpeed();
+  var ang = -Math.PI/2 + (Math.random() * 0.7 - 0.35); // mostly upward
+  ball.vx = Math.cos(ang) * sp; ball.vy = Math.sin(ang) * sp;
+  ball.launched = true;
+  beep(520, 0.07);
+}
+function reset(){
+  score = 0; lives = 3; level = 1; combo = 0;
+  paddle.x = W/2; paddle.targetX = W/2;
+  buildLevel();
+}
+function startGame(){
+  initAudio(); reset(); state = STATE.PLAY;
+  document.getElementById("startPanel").classList.add("hidden");
+  document.getElementById("endPanel").classList.add("hidden");
+  ytFirstFrame();
+}
+function endGame(){
+  state = STATE.OVER;
+  if (score > best) best = score;
+  document.getElementById("score-final").textContent = score + "点";
+  document.getElementById("best-line").textContent = "到達レベル: " + level + "　ベスト: " + best + "点";
+  document.getElementById("endPanel").classList.remove("hidden");
+  drawPaokoCanvases();
+  beep(196, 0.35, "triangle");
+}
+document.getElementById("startBtn").addEventListener("click", startGame);
+document.getElementById("restartBtn").addEventListener("click", startGame);
+
+// --- Input: mouse + touch drag (pointer events cover both), arrow keys ---
+function setTarget(clientX){ paddle.targetX = Math.max(paddle.w/2, Math.min(W - paddle.w/2, clientX)); }
+canvas.addEventListener("pointermove", function(e){ setTarget(e.clientX); });
+canvas.addEventListener("pointerdown", function(e){ setTarget(e.clientX); launchBall(); });
+canvas.addEventListener("touchmove", function(e){ if(e.touches.length) setTarget(e.touches[0].clientX); e.preventDefault(); }, { passive:false });
+canvas.addEventListener("touchstart", function(e){ if(e.touches.length) setTarget(e.touches[0].clientX); launchBall(); }, { passive:true });
+window.addEventListener("keydown", function(e){
+  if (e.key === "ArrowLeft" || e.key === "Left") keys.left = true;
+  else if (e.key === "ArrowRight" || e.key === "Right") keys.right = true;
+  else if (e.key === " " || e.key === "Spacebar"){ launchBall(); if(e.preventDefault) e.preventDefault(); }
+});
+window.addEventListener("keyup", function(e){
+  if (e.key === "ArrowLeft" || e.key === "Left") keys.left = false;
+  else if (e.key === "ArrowRight" || e.key === "Right") keys.right = false;
+});
+
+// --- Pause when tab hidden ---
+document.addEventListener("visibilitychange", function(){
+  paused = document.hidden;
+  if (!paused) lastTs = 0;
+});
+
+// --- Drawing ---
+function drawBackground(){
+  var g = ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,"#050914"); g.addColorStop(1,"#180a33");
+  ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle = "rgba(0,229,199,0.05)";
+  var s = 26;
+  for (var x = 0; x < W; x += s) ctx.fillRect(x, 0, 1, H);
+  for (var y = 0; y < H; y += s) ctx.fillRect(0, y, W, 1);
+}
+function drawBricks(){
+  var g = brickGeom();
+  for (var i = 0; i < bricks.length; i++){
+    var b = bricks[i];
+    var x = g.x0 + b.col * g.bw + g.gap/2, y = g.y0 + b.row * (g.bh + g.gap);
+    var w = g.bw - g.gap, h = g.bh;
+    var col = ROW_COLORS[b.row % ROW_COLORS.length];
+    ctx.fillStyle = (b.maxHp === 2 && b.hp === 1) ? "#5a5a7a" : col;
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = "rgba(255,255,255,0.35)";
+    ctx.fillRect(x, y, w, 4); // pixel highlight
+    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    ctx.fillRect(x, y + h - 4, w, 4);
+    if (b.maxHp === 2 && b.hp === 2){
+      ctx.fillStyle = "rgba(255,255,255,0.75)";
+      ctx.fillRect(x + w/2 - 2, y + h/2 - 2, 4, 4); // tough-brick rivet
+    }
+  }
+}
+function drawPaddle(){
+  var x = paddle.x - paddle.w/2, y = paddleY();
+  var g = ctx.createLinearGradient(x,0,x + paddle.w,0);
+  g.addColorStop(0,"#00e5c7"); g.addColorStop(0.55,"#3d7bff"); g.addColorStop(1,"#b04dff");
+  ctx.fillStyle = g; ctx.fillRect(x, y, paddle.w, paddle.h);
+  ctx.fillStyle = "rgba(255,255,255,0.5)"; ctx.fillRect(x, y, paddle.w, 4);
+}
+function drawBall(){
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = "#00e5c7";
+  ctx.fillRect(ball.x - 2, ball.y - 2, 4, 4);
+}
+function drawHUD(){
+  ctx.fillStyle = "#eaf6ff";
+  ctx.font = "bold 19px sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+  ctx.fillText("スコア: " + score, 14, 30);
+  ctx.textAlign = "center";
+  ctx.fillText("レベル " + level, W/2, 30);
+  ctx.textAlign = "right";
+  var hearts = ""; for (var i = 0; i < 3; i++) hearts += (i < lives ? "❤️" : "🖤");
+  ctx.font = "17px sans-serif"; ctx.fillText(hearts, W - 12, 30);
+  if (combo >= 2){
+    ctx.fillStyle = "#e040fb"; ctx.font = "bold 16px sans-serif"; ctx.textAlign = "center";
+    ctx.fillText("コンボ ×" + combo + " ボーナス中！", W/2, 54);
+  }
+  if (!ball.launched && state === STATE.PLAY){
+    ctx.fillStyle = "rgba(234,246,255,0.85)"; ctx.font = "15px sans-serif"; ctx.textAlign = "center";
+    ctx.fillText("タップ／クリック／スペースで発射", W/2, paddleY() - 34);
+  }
+}
+
+// --- Update ---
+function update(dt){
+  // paddle: keyboard + pointer target
+  var kSpeed = 560 * dt;
+  if (keys.left){ paddle.targetX -= kSpeed; }
+  if (keys.right){ paddle.targetX += kSpeed; }
+  paddle.targetX = Math.max(paddle.w/2, Math.min(W - paddle.w/2, paddle.targetX));
+  paddle.x += (paddle.targetX - paddle.x) * Math.min(1, dt * 22);
+  paddle.x = Math.max(paddle.w/2, Math.min(W - paddle.w/2, paddle.x));
+
+  if (!ball.launched){
+    ball.x = paddle.x; ball.y = paddleY() - ball.r - 1;
+    ball.wait -= dt;
+    if (ball.wait <= 0) launchBall();
+    return;
+  }
+  var prevX = ball.x, prevY = ball.y;
+  ball.x += ball.vx * dt; ball.y += ball.vy * dt;
+
+  // walls
+  if (ball.x < ball.r){ ball.x = ball.r; ball.vx = Math.abs(ball.vx); beep(300, 0.04); }
+  if (ball.x > W - ball.r){ ball.x = W - ball.r; ball.vx = -Math.abs(ball.vx); beep(300, 0.04); }
+  if (ball.y < ball.r){ ball.y = ball.r; ball.vy = Math.abs(ball.vy); beep(300, 0.04); }
+
+  // paddle
+  var py = paddleY();
+  if (ball.vy > 0 && prevY + ball.r <= py + 4 && ball.y + ball.r >= py &&
+      Math.abs(ball.x - paddle.x) <= paddle.w/2 + ball.r){
+    var rel = Math.max(-1, Math.min(1, (ball.x - paddle.x) / (paddle.w/2)));
+    var sp = Math.min(ballSpeed() * 1.35, Math.sqrt(ball.vx*ball.vx + ball.vy*ball.vy) * 1.015);
+    var ang = -Math.PI/2 + rel * 1.05; // up to ~60 degrees
+    ball.vx = Math.cos(ang) * sp; ball.vy = Math.sin(ang) * sp;
+    ball.y = py - ball.r - 0.5;
+    combo = 0; // paddle touch resets the combo
+    beep(440, 0.05);
+  }
+
+  // bricks
+  var g = brickGeom();
+  for (var i = bricks.length - 1; i >= 0; i--){
+    var b = bricks[i];
+    var bx = g.x0 + b.col * g.bw, by = g.y0 + b.row * (g.bh + g.gap);
+    var bw = g.bw, bh = g.bh;
+    if (ball.x + ball.r > bx && ball.x - ball.r < bx + bw &&
+        ball.y + ball.r > by && ball.y - ball.r < by + bh){
+      // bounce axis from previous position
+      if (prevY + ball.r <= by || prevY - ball.r >= by + bh) ball.vy = -ball.vy;
+      else if (prevX + ball.r <= bx || prevX - ball.r >= bx + bw) ball.vx = -ball.vx;
+      else ball.vy = -ball.vy;
+      b.hp--;
+      if (b.hp <= 0){
+        bricks.splice(i, 1);
+        combo++;
+        var pts = 10 + (combo >= 2 ? (combo - 1) * 5 : 0); // combo bonus
+        score += pts;
+        beep(660 + Math.min(600, combo * 40), 0.06);
+        if (bricks.length === 0){
+          level++;
+          beep(880, 0.12); beep(1174, 0.16);
+          buildLevel();
+          return;
+        }
+      } else {
+        beep(380, 0.05);
+      }
+      break; // one brick per frame
+    }
+  }
+
+  // ball lost
+  if (ball.y - ball.r > H){
+    lives--;
+    beep(150, 0.25, "sawtooth");
+    if (lives <= 0){ endGame(); return; }
+    resetBall();
+  }
+}
+function draw(){
+  drawBackground();
+  if (state !== STATE.MENU){
+    drawBricks();
+    drawPaokoCorner();
+    drawPaddle();
+    drawBall();
+    if (state === STATE.PLAY) drawHUD();
+  }
+  if (paused && state === STATE.PLAY){
+    ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle = "#fff"; ctx.font = "bold 28px sans-serif"; ctx.textAlign = "center";
+    ctx.fillText("一時停止中", W/2, H/2);
+  }
+}
+function loop(ts){
+  rafId = requestAnimationFrame(loop);
+  if (!lastTs) lastTs = ts;
+  var dt = Math.min(0.05, (ts - lastTs) / 1000); lastTs = ts;
+  if (!paused && state === STATE.PLAY) update(dt);
+  draw();
+}
+paddle.x = 200; paddle.targetX = 200;
+resize();
+rafId = requestAnimationFrame(loop);
+drawPaokoCanvases();
+ytFirstFrame();
+})();
+</script>
+</body>
+</html>
